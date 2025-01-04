@@ -1,6 +1,7 @@
-import java.util.*;
+import java.sql.*;
+import java.util.Scanner;
 
-// Product class to store product details
+// Product class
 class Product {
     int id;
     String name;
@@ -13,17 +14,37 @@ class Product {
         this.quantity = quantity;
         this.price = price;
     }
-
-    public String toString() {
-        return "ID: " + id + ", Name: " + name + ", Quantity: " + quantity + ", Price: $" + price;
-    }
 }
 
 // Inventory Management System class
 public class InventoryManagementSystem {
 
-    // List to store products
-    static List<Product> products = new ArrayList<>();
+    // SQLite connection
+    private static Connection connect() {
+        Connection conn = null;
+        try {
+            // Connect to SQLite database
+            conn = DriverManager.getConnection("jdbc:sqlite:inventory.db");
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return conn;
+    }
+
+    // Create table if not exists
+    static void createTable() {
+        String sql = "CREATE TABLE IF NOT EXISTS Products (" +
+                     "id INTEGER PRIMARY KEY, " +
+                     "name TEXT, " +
+                     "quantity INTEGER, " +
+                     "price REAL)";
+        try (Connection conn = connect();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
 
     // Add a new product
     static void addProduct() {
@@ -37,15 +58,37 @@ public class InventoryManagementSystem {
         int quantity = sc.nextInt();
         System.out.print("Enter Price: ");
         double price = sc.nextDouble();
-        products.add(new Product(id, name, quantity, price));
-        System.out.println("Product added successfully!");
+
+        String sql = "INSERT INTO Products(id, name, quantity, price) VALUES(?, ?, ?, ?)";
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, id);
+            pstmt.setString(2, name);
+            pstmt.setInt(3, quantity);
+            pstmt.setDouble(4, price);
+            pstmt.executeUpdate();
+            System.out.println("Product added successfully!");
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     // View all products
     static void viewProducts() {
-        System.out.println("\nList of Products:");
-        for (Product p : products) {
-            System.out.println(p);
+        String sql = "SELECT * FROM Products";
+        try (Connection conn = connect();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            System.out.println("\nList of Products:");
+            while (rs.next()) {
+                System.out.println("ID: " + rs.getInt("id") +
+                                   ", Name: " + rs.getString("name") +
+                                   ", Quantity: " + rs.getInt("quantity") +
+                                   ", Price: $" + rs.getDouble("price"));
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
     }
 
@@ -55,15 +98,22 @@ public class InventoryManagementSystem {
         System.out.print("Enter Product ID: ");
         int id = sc.nextInt();
         System.out.print("Enter New Quantity: ");
-        int newQuantity = sc.nextInt();
-        for (Product p : products) {
-            if (p.id == id) {
-                p.quantity = newQuantity;
+        int quantity = sc.nextInt();
+
+        String sql = "UPDATE Products SET quantity = ? WHERE id = ?";
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, quantity);
+            pstmt.setInt(2, id);
+            int rowsUpdated = pstmt.executeUpdate();
+            if (rowsUpdated > 0) {
                 System.out.println("Stock updated successfully!");
-                return;
+            } else {
+                System.out.println("Product not found!");
             }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
-        System.out.println("Product not found!");
     }
 
     // Process sale
@@ -73,22 +123,44 @@ public class InventoryManagementSystem {
         int id = sc.nextInt();
         System.out.print("Enter Quantity Sold: ");
         int quantitySold = sc.nextInt();
-        for (Product p : products) {
-            if (p.id == id) {
-                if (p.quantity >= quantitySold) {
-                    p.quantity -= quantitySold;
-                    System.out.println("Sale processed successfully! Total: $" + (p.price * quantitySold));
+
+        String selectSQL = "SELECT quantity, price FROM Products WHERE id = ?";
+        String updateSQL = "UPDATE Products SET quantity = ? WHERE id = ?";
+
+        try (Connection conn = connect();
+             PreparedStatement selectStmt = conn.prepareStatement(selectSQL)) {
+
+            selectStmt.setInt(1, id);
+            ResultSet rs = selectStmt.executeQuery();
+
+            if (rs.next()) {
+                int currentQuantity = rs.getInt("quantity");
+                double price = rs.getDouble("price");
+
+                if (currentQuantity >= quantitySold) {
+                    int newQuantity = currentQuantity - quantitySold;
+
+                    try (PreparedStatement updateStmt = conn.prepareStatement(updateSQL)) {
+                        updateStmt.setInt(1, newQuantity);
+                        updateStmt.setInt(2, id);
+                        updateStmt.executeUpdate();
+                        System.out.println("Sale processed successfully! Total: $" + (price * quantitySold));
+                    }
                 } else {
                     System.out.println("Insufficient stock!");
                 }
-                return;
+            } else {
+                System.out.println("Product not found!");
             }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
-        System.out.println("Product not found!");
     }
 
     // Main menu
     public static void main(String[] args) {
+        createTable(); // Ensure table exists
+
         Scanner sc = new Scanner(System.in);
         while (true) {
             System.out.println("\nInventory Management System");
