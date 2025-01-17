@@ -1,23 +1,78 @@
 import java.sql.*;
 import java.util.Scanner;
 
-public class UniversityManagementSystem {
+// Base Entity Classes
+class Student {
+    int id;
+    String name;
+    String dob;
+    String email;
+    String phone;
 
-    // Database connection
+    public Student(String name, String dob, String email, String phone) {
+        this.name = name;
+        this.dob = dob;
+        this.email = email;
+        this.phone = phone;
+    }
+}
+
+class Faculty {
+    int id;
+    String name;
+    String email;
+    String phone;
+
+    public Faculty(String name, String email, String phone) {
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+    }
+}
+
+class Course {
+    int id;
+    String courseName;
+    int facultyId;
+
+    public Course(String courseName, int facultyId) {
+        this.courseName = courseName;
+        this.facultyId = facultyId;
+    }
+}
+
+class Grade {
+    int id;
+    int studentId;
+    int courseId;
+    String grade;
+
+    public Grade(int studentId, int courseId, String grade) {
+        this.studentId = studentId;
+        this.courseId = courseId;
+        this.grade = grade;
+    }
+}
+
+// Main University Management System
+public class UniversityManagementSystem {
+    private static final String DATABASE_URL = "jdbc:sqlite:university.db";
+
+    // Database Connection
     private static Connection connect() {
-        Connection conn = null;
         try {
             Class.forName("org.sqlite.JDBC");
-            conn = DriverManager.getConnection("jdbc:sqlite:university.db");
+            return DriverManager.getConnection(DATABASE_URL);
         } catch (Exception e) {
             System.out.println("Database Connection Error: " + e.getMessage());
+            return null;
         }
-        return conn;
     }
 
-    // Initialize database and tables
+    // Initialize Database and Tables
     private static void initializeDB() {
-        String studentsTable = """
+        String[] tables = {
+            """
             CREATE TABLE IF NOT EXISTS Students (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -25,27 +80,24 @@ public class UniversityManagementSystem {
                 email TEXT,
                 phone TEXT
             )
-        """;
-
-        String facultyTable = """
+            """,
+            """
             CREATE TABLE IF NOT EXISTS Faculty (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 email TEXT,
                 phone TEXT
             )
-        """;
-
-        String coursesTable = """
+            """,
+            """
             CREATE TABLE IF NOT EXISTS Courses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 course_name TEXT NOT NULL,
                 faculty_id INTEGER,
                 FOREIGN KEY(faculty_id) REFERENCES Faculty(id)
             )
-        """;
-
-        String gradesTable = """
+            """,
+            """
             CREATE TABLE IF NOT EXISTS Grades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_id INTEGER,
@@ -54,38 +106,26 @@ public class UniversityManagementSystem {
                 FOREIGN KEY(student_id) REFERENCES Students(id),
                 FOREIGN KEY(course_id) REFERENCES Courses(id)
             )
-        """;
+            """
+        };
 
         try (Connection conn = connect(); Statement stmt = conn.createStatement()) {
-            stmt.execute(studentsTable);
-            stmt.execute(facultyTable);
-            stmt.execute(coursesTable);
-            stmt.execute(gradesTable);
+            for (String table : tables) {
+                stmt.execute(table);
+            }
         } catch (SQLException e) {
             System.out.println("Error creating tables: " + e.getMessage());
         }
     }
 
-    // Add a student
-    private static void addStudent() {
-        try (Connection conn = connect(); 
-             PreparedStatement pstmt = conn.prepareStatement(
-                "INSERT INTO Students (name, dob, email, phone) VALUES (?, ?, ?, ?)")) {
-            
-            Scanner scanner = new Scanner(System.in);
-            System.out.print("Enter Student Name: ");
-            String name = scanner.nextLine();
-            System.out.print("Enter Date of Birth (YYYY-MM-DD): ");
-            String dob = scanner.nextLine();
-            System.out.print("Enter Email: ");
-            String email = scanner.nextLine();
-            System.out.print("Enter Phone: ");
-            String phone = scanner.nextLine();
-
-            pstmt.setString(1, name);
-            pstmt.setString(2, dob);
-            pstmt.setString(3, email);
-            pstmt.setString(4, phone);
+    // Add a Student
+    private static void addStudent(Student student) {
+        String sql = "INSERT INTO Students (name, dob, email, phone) VALUES (?, ?, ?, ?)";
+        try (Connection conn = connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, student.name);
+            pstmt.setString(2, student.dob);
+            pstmt.setString(3, student.email);
+            pstmt.setString(4, student.phone);
             pstmt.executeUpdate();
             System.out.println("Student added successfully!");
         } catch (SQLException e) {
@@ -93,40 +133,12 @@ public class UniversityManagementSystem {
         }
     }
 
-    // View students
-    private static void viewStudents() {
-        try (Connection conn = connect(); 
-             Statement stmt = conn.createStatement(); 
-             ResultSet rs = stmt.executeQuery("SELECT * FROM Students")) {
-            
-            System.out.println("\nStudents:");
-            while (rs.next()) {
-                System.out.printf("ID: %d, Name: %s, DOB: %s, Email: %s, Phone: %s%n",
-                        rs.getInt("id"), rs.getString("name"), rs.getString("dob"), rs.getString("email"), rs.getString("phone"));
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving students: " + e.getMessage());
-        }
-    }
-
-    // Add a course
-    private static void addCourse() {
-        try (Connection conn = connect(); 
-             PreparedStatement pstmt = conn.prepareStatement(
-                "INSERT INTO Courses (course_name, faculty_id) VALUES (?, ?)")) {
-            
-            Scanner scanner = new Scanner(System.in);
-            System.out.print("Enter Course Name: ");
-            String courseName = scanner.nextLine();
-            System.out.print("Enter Faculty ID (or leave blank): ");
-            String facultyId = scanner.nextLine();
-
-            pstmt.setString(1, courseName);
-            if (facultyId.isEmpty()) {
-                pstmt.setNull(2, java.sql.Types.INTEGER);
-            } else {
-                pstmt.setInt(2, Integer.parseInt(facultyId));
-            }
+    // Add a Course
+    private static void addCourse(Course course) {
+        String sql = "INSERT INTO Courses (course_name, faculty_id) VALUES (?, ?)";
+        try (Connection conn = connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, course.courseName);
+            pstmt.setInt(2, course.facultyId);
             pstmt.executeUpdate();
             System.out.println("Course added successfully!");
         } catch (SQLException e) {
@@ -134,45 +146,13 @@ public class UniversityManagementSystem {
         }
     }
 
-    // View courses
-    private static void viewCourses() {
-        try (Connection conn = connect(); 
-             Statement stmt = conn.createStatement(); 
-             ResultSet rs = stmt.executeQuery("""
-                SELECT Courses.id, Courses.course_name, Faculty.name AS faculty_name
-                FROM Courses
-                LEFT JOIN Faculty ON Courses.faculty_id = Faculty.id
-            """)) {
-            
-            System.out.println("\nCourses:");
-            while (rs.next()) {
-                System.out.printf("ID: %d, Course: %s, Faculty: %s%n",
-                        rs.getInt("id"), rs.getString("course_name"), 
-                        rs.getString("faculty_name") != null ? rs.getString("faculty_name") : "Not Assigned");
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving courses: " + e.getMessage());
-        }
-    }
-
-    // Assign a grade
-    private static void assignGrade() {
-        try (Connection conn = connect(); 
-             PreparedStatement pstmt = conn.prepareStatement(
-                "INSERT INTO Grades (student_id, course_id, grade) VALUES (?, ?, ?)")) {
-            
-            Scanner scanner = new Scanner(System.in);
-            System.out.print("Enter Student ID: ");
-            int studentId = scanner.nextInt();
-            System.out.print("Enter Course ID: ");
-            int courseId = scanner.nextInt();
-            scanner.nextLine(); // Consume newline
-            System.out.print("Enter Grade: ");
-            String grade = scanner.nextLine();
-
-            pstmt.setInt(1, studentId);
-            pstmt.setInt(2, courseId);
-            pstmt.setString(3, grade);
+    // Assign a Grade
+    private static void assignGrade(Grade grade) {
+        String sql = "INSERT INTO Grades (student_id, course_id, grade) VALUES (?, ?, ?)";
+        try (Connection conn = connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, grade.studentId);
+            pstmt.setInt(2, grade.courseId);
+            pstmt.setString(3, grade.grade);
             pstmt.executeUpdate();
             System.out.println("Grade assigned successfully!");
         } catch (SQLException e) {
@@ -180,57 +160,59 @@ public class UniversityManagementSystem {
         }
     }
 
-    // View grades
-    private static void viewGrades() {
-        try (Connection conn = connect(); 
-             Statement stmt = conn.createStatement(); 
-             ResultSet rs = stmt.executeQuery("""
-                SELECT Students.name AS student_name, Courses.course_name, Grades.grade
-                FROM Grades
-                JOIN Students ON Grades.student_id = Students.id
-                JOIN Courses ON Grades.course_id = Courses.id
-            """)) {
-            
-            System.out.println("\nGrades:");
-            while (rs.next()) {
-                System.out.printf("Student: %s, Course: %s, Grade: %s%n",
-                        rs.getString("student_name"), rs.getString("course_name"), rs.getString("grade"));
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving grades: " + e.getMessage());
-        }
-    }
-
-    // Main menu
-    public static void main(String[] args) {
-        initializeDB();
+    // Main Menu
+    private static void mainMenu() {
         Scanner scanner = new Scanner(System.in);
-
         while (true) {
             System.out.println("\nUniversity Management System");
             System.out.println("1. Add Student");
-            System.out.println("2. View Students");
-            System.out.println("3. Add Course");
-            System.out.println("4. View Courses");
-            System.out.println("5. Assign Grade");
-            System.out.println("6. View Grades");
-            System.out.println("7. Exit");
+            System.out.println("2. Add Course");
+            System.out.println("3. Assign Grade");
+            System.out.println("4. Exit");
             System.out.print("Choose an option: ");
-            
+
             int choice = scanner.nextInt();
+            scanner.nextLine(); // Consume newline
             switch (choice) {
-                case 1 -> addStudent();
-                case 2 -> viewStudents();
-                case 3 -> addCourse();
-                case 4 -> viewCourses();
-                case 5 -> assignGrade();
-                case 6 -> viewGrades();
-                case 7 -> {
+                case 1 -> {
+                    System.out.print("Enter Student Name: ");
+                    String name = scanner.nextLine();
+                    System.out.print("Enter Date of Birth (YYYY-MM-DD): ");
+                    String dob = scanner.nextLine();
+                    System.out.print("Enter Email: ");
+                    String email = scanner.nextLine();
+                    System.out.print("Enter Phone: ");
+                    String phone = scanner.nextLine();
+                    addStudent(new Student(name, dob, email, phone));
+                }
+                case 2 -> {
+                    System.out.print("Enter Course Name: ");
+                    String courseName = scanner.nextLine();
+                    System.out.print("Enter Faculty ID: ");
+                    int facultyId = scanner.nextInt();
+                    addCourse(new Course(courseName, facultyId));
+                }
+                case 3 -> {
+                    System.out.print("Enter Student ID: ");
+                    int studentId = scanner.nextInt();
+                    System.out.print("Enter Course ID: ");
+                    int courseId = scanner.nextInt();
+                    scanner.nextLine(); // Consume newline
+                    System.out.print("Enter Grade: ");
+                    String grade = scanner.nextLine();
+                    assignGrade(new Grade(studentId, courseId, grade));
+                }
+                case 4 -> {
                     System.out.println("Exiting... Goodbye!");
                     return;
                 }
-                default -> System.out.println("Invalid option. Try again.");
+                default -> System.out.println("Invalid choice! Try again.");
             }
         }
+    }
+
+    public static void main(String[] args) {
+        initializeDB();
+        mainMenu();
     }
 }
